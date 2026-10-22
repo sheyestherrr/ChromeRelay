@@ -61,26 +61,138 @@
   }
   try { connect(); } catch { }
 
-  // ---------------- 对话提取（启发式） ----------------
-  function extractConversation() {
-    const candidates = document.querySelectorAll(
-      '[class*="message"], [class*="Message"], [data-message], [class*="chat-item"]'
-    );
-    const parts = [];
-    candidates.forEach((el) => {
-      const t = (el.innerText || "").trim();
-      if (t && t.length > 1 && !parts.includes(t)) parts.push(t);
-    });
-    if (parts.length < 2) {
-      let best = null, bestLen = 0;
-      document.querySelectorAll("main, [class*='chat'], [class*='conversation'], [class*='scroll'], div").forEach((el) => {
-        const t = (el.innerText || "").trim();
-        if (t.length > bestLen && el.scrollHeight > el.clientHeight + 50) { best = t; bestLen = t.length; }
-      });
-      if (best) return best;
-      return (document.body.innerText || "").trim();
+  // ---------------- 页面与标签绑定信息 ----------------
+  async function getBoundPageInfo() {
+    // 优先从 sidepanel.html?tabId=XXXX 中获取当前绑定的 tabId
+    const params = new URLSearchParams(location.search);
+    const tabIdStr = params.get("tabId");
+    const tabId = tabIdStr ? parseInt(tabIdStr, 10) : null;
+    if (tabId && !isNaN(tabId) && typeof chrome !== "undefined" && chrome.tabs) {
+      try {
+        const tab = await chrome.tabs.get(tabId);
+        if (tab && tab.url) {
+          return {
+            title: tab.title || "无标题页面",
+            url: tab.url,
+            tabId: tab.id,
+          };
+        }
+      } catch {}
     }
-    return parts.join("\n\n---\n\n");
+    // 兜底：查询当前窗口当前激活的标签页
+    if (typeof chrome !== "undefined" && chrome.tabs) {
+      try {
+        const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        if (activeTab && activeTab.url) {
+          return {
+            title: activeTab.title || "无标题页面",
+            url: activeTab.url,
+            tabId: activeTab.id,
+          };
+        }
+      } catch {}
+    }
+    return {
+      title: document.title || "侧边栏对话",
+      url: "sidepanel://chat",
+      tabId: null,
+    };
+  }
+
+  // ---------------- 杂质与 UI 文本过滤 ----------------
+  const NOISE_PATTERNS = [
+    /^⤴(\s*推送)?(\(\d+\))?$/,                       // 我们的按钮图标与文字
+    /Claude\s*是\s*AI.*仔细核实/i,                     // 底部免责声明（中文）
+    /Claude is an? AI.*can make mistakes/i,         // 底部免责声明（英文）
+    /Claude may make mistakes/i,
+    /^操作前询问$/,                                 // 权限模式下拉文本
+    /^无需询问即可操作$/,
+    /^Ask before acting$/,
+    /^Act without asking$/,
+    /^Following a plan$/,
+    /^按计划执行$/,
+    /^教学\s*Claude$/,                             // 工具栏按钮文字
+    /^Teach\s*Claude$/i,
+    /^给\s*Claude\s*发消息.*$/,                     // 输入框占位文本
+    /^Message\s*Claude.*$/i,
+    /^正在生成\.\.\.$/,
+    /^已复制$/,
+    /^复制消息$/,
+    /^展开消息$/,
+    /^折叠消息$/
+  ];
+
+  function sanitizeConversation(text) {
+    if (!text) return "";
+    const lines = text.split("\n");
+    const cleanLines = [];
+    for (let line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) {
+        if (cleanLines.length > 0 && cleanLines[cleanLines.length - 1] !== "") {
+          cleanLines.push("");
+        }
+        continue;
+      }
+      if (NOISE_PATTERNS.some((p) => p.test(trimmed))) continue;
+      cleanLines.push(trimmed);
+    }
+    return cleanLines.join("\n").trim();
+  }
+
+  // ---------------- 对话提取（精准气泡 + 输入框排除 + 杂质过滤） ----------------
+  function extractConversation() {
+    // 排除输入框容器（包含 textarea、底部工具栏、模式下拉、免责声明等）
+    const inputArea =
+      document.querySelector('textarea, [contenteditable="true"]')?.closest('form, div.border, [class*="border"]') ||
+      document.getElementById(BTN_ID)?.closest('div.border, [class*="border"]') ||
+      document.querySelector("textarea")?.parentElement;
+
+    // 优先抓取具体消息气泡：
+    // - Claude 响应：.font-claude-response, .font-claude-response-body
+    // - 用户消息：.font-base
+    const bubbleSelectors = [
+      ".font-claude-response",
+      ".font-claude-response-body",
+      '[class*="font-claude-response"]',
+      ".font-base",
+      '[data-test-id*="message"]',
+      '[class*="message-content"]',
+      '[class*="Message"]',
+    ];
+
+    const parts = [];
+    const elements = document.querySelectorAll(bubbleSelectors.join(", "));
+    elements.forEach((el) => {
+      if (inputArea && inputArea.contains(el)) return;
+      if (el.closest(`#${BTN_ID}`) || el.id === BTN_ID) return;
+      if (el.closest('[role="dialog"], [role="menu"], [role="tooltip"]')) return;
+      if (el.querySelector(bubbleSelectors.join(", "))) return;
+
+      const raw = (el.innerText || "").trim();
+      const clean = sanitizeConversation(raw);
+      if (clean && clean.length > 1 && !parts.includes(clean)) {
+        parts.push(clean);
+      }
+    });
+
+    if (parts.length >= 2) {
+      return parts.join("\n\n---\n\n");
+    }
+
+    // 兜底提取：在滚动区域中提取，并严格避开输入区域与杂质
+    let scrollEl = null, bestLen = 0;
+    document.querySelectorAll("main, [class*='scroll'], div").forEach((el) => {
+      if (inputArea && el.contains(inputArea) && el !== document.body) return;
+      const t = (el.innerText || "").trim();
+      if (t.length > bestLen && el.scrollHeight > el.clientHeight + 40 && el.clientHeight > 150) {
+        scrollEl = el;
+        bestLen = t.length;
+      }
+    });
+
+    const raw = scrollEl ? scrollEl.innerText || "" : document.body.innerText || "";
+    return sanitizeConversation(raw);
   }
 
   // ---------------- UI ----------------
@@ -116,12 +228,13 @@
       (n ? `（已存 ${n} 条）` : "");
   }
 
-  function doPush() {
+  async function doPush() {
     const text = extractConversation();
     if (!text || text.length < 2) return toast("没有可推送的对话内容", false);
+    const page = await getBoundPageInfo();
     const payload = {
-      title: document.title || "侧边栏对话",
-      url: "sidepanel://chat",
+      title: page.title || "侧边栏对话",
+      url: page.url || "sidepanel://chat",
       text: text.slice(0, 400 * 1024),
       source: "sidepanel",
       ts: Date.now(),
@@ -211,7 +324,7 @@
     }
     btn.addEventListener("click", () => {
       if (btn.dataset.dragged) { delete btn.dataset.dragged; return; } // 拖拽落下的那次 click 不算
-      doPush();
+      doPush().catch((e) => toast("推送失败: " + (e?.message || e), false));
     });
     return btn;
   }

@@ -184,7 +184,7 @@ TOOLS.push(INBOX_TOOL);
 
 function handleInbox(args) {
   const action = (args && args.action) || 'list';
-  const fmtHead = (it) => `#${it.id} [${it.source}] ${new Date(it.ts).toLocaleString()} — ${it.title}（${it.text.length} 字）${it.url && it.url !== 'sidepanel://chat' ? '\n  链接: ' + it.url : ''}`;
+  const fmtHead = (it) => `#${it.id} [${it.source}] ${new Date(it.ts).toLocaleString()} — ${it.title}（${it.text.length} 字）${it.url ? '\n  链接: ' + it.url : ''}`;
   if (action === 'list') {
     if (!inbox.length) return { content: [{ type: 'text', text: '收件箱为空。用户可在 Chrome 网页上右键"发送到 Agent"，或在扩展侧边栏点"⤴ 推送到 Agent"（可推送侧边栏 AI 对话全文）。' }] };
     return { content: [{ type: 'text', text: `收件箱共 ${inbox.length} 条（旧→新）：\n` + inbox.map(fmtHead).join('\n') + '\n\n用 chrome_inbox {action:"read"} 读取最新一条，{action:"read", id:N} 读指定条目。' }] };
