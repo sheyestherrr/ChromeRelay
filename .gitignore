@@ -1,0 +1,18 @@
+# 运行时日志与本地收件箱
+mcp-bridge/bridge.log
+mcp-bridge/inbox.jsonl
+*.log
+
+# 临时与测试文件
+tmp-*
+
+# 操作系统与编辑器
+.DS_Store
+Thumbs.db
+Desktop.ini
+.vscode/
+.idea/
+
+# 依赖与打包
+node_modules/
+npm-debug.log*
