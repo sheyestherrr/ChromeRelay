@@ -12,7 +12,7 @@
   const WS_URL = "ws://127.0.0.1:19288";
   const OUTBOX_KEY = "ccpp_outbox";
   const POS_KEY = "ccpp_btn_pos";
-  const OUTBOX_MAX = 20;
+  const OUTBOX_MAX = 100;
   const BTN_ID = "ccpp-push-btn";
   let ws = null, retryTimer = null;
 

@@ -131,7 +131,7 @@ const TOOLS = loadTools();
 // 用户在 Chrome 里通过①页面右键"发送到 Agent"②侧边栏"⤴ 推送到 Agent"按钮，
 // 把网页内容/侧边栏对话全文经 WS 推送到这里；Agent 用 chrome_inbox 工具拉取。
 const INBOX_FILE = path.join(__dirname, 'inbox.jsonl');
-const INBOX_MAX = 50;
+const INBOX_MAX = Number(process.env.CHROME_BRIDGE_INBOX_MAX || 1000);
 let inbox = [];
 let inboxSeq = 0;
 try { // 启动时从 JSONL 恢复（桥重启不丢推送）

@@ -43,6 +43,7 @@ Agent 工具  ←stdio MCP 或 HTTP MCP→  chrome-bridge.js   ←WebSocket ws:/
 | `CHROME_BRIDGE_CALL_TIMEOUT_MS` | `150000` | 单次工具调用超时 |
 | `CHROME_BRIDGE_TOOLS` | （全部） | 逗号分隔工具白名单：精简工具数或排查严格模型校验 |
 | `CHROME_BRIDGE_SCHEMA_COMPAT` | `1` | 默认开启：schema 规范化（R1-R6，详见代码注释），兼容严格模型校验；设 `0` 关闭 |
+| `CHROME_BRIDGE_INBOX_MAX` | `1000` | 收件箱最大持久化容量（超过时自动 FIFO 淘汰） |
 | `CHROME_BRIDGE_HTTP_PORT` | `19289`（`--http` 时） | HTTP MCP 监听端口；设置该变量等同 `--http` 启用共享模式 |
 
 > 共享模式下这些变量在**启动桥进程时**设置（桥是独立常驻进程，Agent 的 MCP 配置里的 `env` 到不了桥）。
